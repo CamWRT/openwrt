@@ -16,8 +16,17 @@ define Image/BuildKernel
 	$(call Image/BuildKernel/MkuImage, \
 		none, 0x80008000, 0x80008000, \
 		$(BIN_DIR)/$(IMG_PREFIX)-$(PROFILE)-zImage, \
-		$(BIN_DIR)/$(IMG_PREFIX)-$(PROFILE)-uImage, \
+		$(KDIR)/$(IMG_PREFIX)-$(PROFILE)-uImage, \
 	)
+	dd if=$(KDIR)/$(IMG_PREFIX)-$(PROFILE)-uImage \
+		of=$(BIN_DIR)/$(IMG_PREFIX)-$(PROFILE)-uImage \
+		bs=128k conv=sync
+
+ifneq (,$(wildcard ./install-$(PROFILE).scr))
+	grep -ve '^#' ./install-$(PROFILE).scr > $(KDIR)/install-$(PROFILE).scr
+	mkimage -A arm -O u-boot -T script -C none -n "OpenWRT Installer for $(PROFILE)" \
+		-d $(KDIR)/install-$(PROFILE).scr $(BIN_DIR)/$(IMG_PREFIX)-$(PROFILE)-install.uscr
+endif
 endef
 
 define Image/InstallKernel

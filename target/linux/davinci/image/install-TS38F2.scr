@@ -1,0 +1,36 @@
+#
+# Automatic installation script for TS38F2
+#
+
+echo *** Installing OpenWRT to TS38F2
+
+setenv kernelfile openwrt-davinci-dm36x-TS38F2-uImage
+setenv rootfsfile openwrt-davinci-dm36x-TS38F2-squashfs-ubinized.bin
+
+# this parameters must match built-in kernel mtd partitions
+setenv kernelnaddr 0x400000
+setenv kernelnsize 0x800000
+setenv rootfsnaddr 0xc00000
+
+echo *** Installing kernel: $(kernelfile)
+tftp 0x82000000 $(kernelfile)
+nand erase $(kernelnaddr) $(kernelnsize)
+nand write $(fileaddr) $(kernelnaddr) $(filesize)
+
+echo *** Installing UBI rootfs: $(rootfsfile)
+tftp 0x82000000 $(rootfsfile)
+nand erase $(rootfsnaddr)
+nand write $(fileaddr) $(rootfsnaddr) $(filesize)
+
+echo *** Original U-Boot environment:
+printenv
+echo
+echo *** Modifying U-Boot environment.
+
+setenv bootcmd  nboot 0x80700000 0 \$(kernelnaddr)\; bootm 0x80700000
+setenv bootargs 55M console=ttyS0,115200n8 eth=\$(ethaddr)
+saveenv
+echo *** New environment:
+printenv
+echo
+echo *** Done. Enter \"reset\" to boot new firmware.
