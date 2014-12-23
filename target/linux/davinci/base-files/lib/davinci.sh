@@ -10,7 +10,13 @@ davinci_board_detect() {
 	local machine
 	local name
 
-	# XXX: TODO
+	machine=$(awk 'BEGIN{FS="[ \t]+:[ \t]"} /Hardware/ {print $2}' /proc/cpuinfo)
+
+	case "$machine" in
+	*"TS38F2")
+		name="TS38F2"
+		;;
+	esac
 
 	[ -z "$name" ] && name="unknown"
 

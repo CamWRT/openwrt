@@ -1,8 +1,18 @@
-From b3adf337ed89f55e714c67b1c5f8b9d55bb9d4a2 Mon Sep 17 00:00:00 2001
+From f8f3a7e5b88c1e6e15c52a9a1f0e8eb2b56aac6c Mon Sep 17 00:00:00 2001
 From: Vladimir Ermakov <vooon341@gmail.com>
 Date: Thu, 18 Dec 2014 02:33:42 +0300
 Subject: [PATCH 2/3] DM368 IPNC: TS38F2 Initial board support. No sensor.
 
+This board conflict with DM365-EVM, because it use same machine id.
+
+Enabled peripherals:
+* EMAC ethernet
+* NAND driver and chip
+* UART (only one, used as debug console)
+* I2C bus
+* DS1337 RTC
+
+Signed-off-by: Vladimir Ermakov <vooon341@gmail.com>
 ---
  arch/arm/mach-davinci/Kconfig             |   8 +
  arch/arm/mach-davinci/Makefile            |   1 +
@@ -43,7 +53,7 @@ index 2204239..3c130b1 100644
  obj-$(CONFIG_CPU_IDLE)			+= cpuidle.o
 diff --git a/arch/arm/mach-davinci/board-ts38f2-ipnc.c b/arch/arm/mach-davinci/board-ts38f2-ipnc.c
 new file mode 100644
-index 0000000..b5b4a82
+index 0000000..ea8ed58
 --- /dev/null
 +++ b/arch/arm/mach-davinci/board-ts38f2-ipnc.c
 @@ -0,0 +1,337 @@
@@ -240,7 +250,7 @@ index 0000000..b5b4a82
 +
 +static struct gpio_led gpio_leds[] = {
 +	{
-+		.name = "system:red",
++		.name = "ts38f2:red:status",
 +		.gpio = 33,
 +		.active_low = true,
 +		.default_trigger = "heartbeat",
