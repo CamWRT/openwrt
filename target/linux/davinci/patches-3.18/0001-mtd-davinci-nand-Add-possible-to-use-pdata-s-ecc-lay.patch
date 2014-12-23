@@ -1,0 +1,42 @@
+From 269fe5a770ef09a35cedb2924cacb71233b74e33 Mon Sep 17 00:00:00 2001
+From: Vladimir Ermakov <vooon341@gmail.com>
+Date: Thu, 18 Dec 2014 06:15:44 +0300
+Subject: [PATCH 1/3] mtd davinci-nand: Add possible to use pdata's ecc layout.
+
+See: http://processors.wiki.ti.com/index.php/DM365_Nand_ECC_layout
+Another solution is add cpu check for that layout.
+---
+ drivers/mtd/nand/davinci_nand.c           | 2 +-
+ include/linux/platform_data/mtd-davinci.h | 3 +++
+ 2 files changed, 4 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/mtd/nand/davinci_nand.c b/drivers/mtd/nand/davinci_nand.c
+index b922c8e..6bd63ca 100644
+--- a/drivers/mtd/nand/davinci_nand.c
++++ b/drivers/mtd/nand/davinci_nand.c
+@@ -792,7 +792,7 @@ static int nand_davinci_probe(struct platform_device *pdev)
+ 			goto syndrome_done;
+ 		}
+ 		if (chunks == 4) {
+-			info->ecclayout = hwecc4_2048;
++			info->ecclayout = (pdata->ecclayout != NULL)? *(pdata->ecclayout) : hwecc4_2048;
+ 			info->chip.ecc.mode = NAND_ECC_HW_OOB_FIRST;
+ 			goto syndrome_done;
+ 		}
+diff --git a/include/linux/platform_data/mtd-davinci.h b/include/linux/platform_data/mtd-davinci.h
+index 1cf555a..315c681 100644
+--- a/include/linux/platform_data/mtd-davinci.h
++++ b/include/linux/platform_data/mtd-davinci.h
+@@ -85,6 +85,9 @@ struct davinci_nand_pdata {		/* platform_data */
+ 
+ 	/* Access timings */
+ 	struct davinci_aemif_timing	*timing;
++
++	/* Nand ECC layout */
++	struct nand_ecclayout	*ecclayout;
+ };
+ 
+ #endif	/* __ARCH_ARM_DAVINCI_NAND_H */
+-- 
+2.1.0
+

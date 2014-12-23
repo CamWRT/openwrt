@@ -1,0 +1,389 @@
+From b3adf337ed89f55e714c67b1c5f8b9d55bb9d4a2 Mon Sep 17 00:00:00 2001
+From: Vladimir Ermakov <vooon341@gmail.com>
+Date: Thu, 18 Dec 2014 02:33:42 +0300
+Subject: [PATCH 2/3] DM368 IPNC: TS38F2 Initial board support. No sensor.
+
+---
+ arch/arm/mach-davinci/Kconfig             |   8 +
+ arch/arm/mach-davinci/Makefile            |   1 +
+ arch/arm/mach-davinci/board-ts38f2-ipnc.c | 337 ++++++++++++++++++++++++++++++
+ 3 files changed, 346 insertions(+)
+ create mode 100644 arch/arm/mach-davinci/board-ts38f2-ipnc.c
+
+diff --git a/arch/arm/mach-davinci/Kconfig b/arch/arm/mach-davinci/Kconfig
+index 584e8d4..d68306c 100644
+--- a/arch/arm/mach-davinci/Kconfig
++++ b/arch/arm/mach-davinci/Kconfig
+@@ -126,6 +126,14 @@ config MACH_DAVINCI_DM365_EVM
+ 	  Configure this option to specify whether the board used
+ 	  for development is a DM365 EVM
+ 
++config MACH_TS38F2_IPNC
++	bool "TOPSEE TS38F2 camera module"
++	default ARCH_DAVINCI_DM365
++	depends on ARCH_DAVINCI_DM365
++	select I2C
++	help
++	  Say Y here to select DM368 IP Network Camera module (TS38F2/SIP-1080P).
++
+ config MACH_DAVINCI_DA830_EVM
+ 	bool "TI DA830/OMAP-L137/AM17x Reference Platform"
+ 	default ARCH_DAVINCI_DA830
+diff --git a/arch/arm/mach-davinci/Makefile b/arch/arm/mach-davinci/Makefile
+index 2204239..3c130b1 100644
+--- a/arch/arm/mach-davinci/Makefile
++++ b/arch/arm/mach-davinci/Makefile
+@@ -33,6 +33,7 @@ obj-$(CONFIG_MACH_DAVINCI_DA830_EVM)	+= board-da830-evm.o
+ obj-$(CONFIG_MACH_DAVINCI_DA850_EVM)	+= board-da850-evm.o
+ obj-$(CONFIG_MACH_MITYOMAPL138)		+= board-mityomapl138.o
+ obj-$(CONFIG_MACH_OMAPL138_HAWKBOARD)	+= board-omapl138-hawk.o
++obj-$(CONFIG_MACH_TS38F2_IPNC)		+= board-ts38f2-ipnc.o
+ 
+ # Power Management
+ obj-$(CONFIG_CPU_IDLE)			+= cpuidle.o
+diff --git a/arch/arm/mach-davinci/board-ts38f2-ipnc.c b/arch/arm/mach-davinci/board-ts38f2-ipnc.c
+new file mode 100644
+index 0000000..b5b4a82
+--- /dev/null
++++ b/arch/arm/mach-davinci/board-ts38f2-ipnc.c
+@@ -0,0 +1,337 @@
++/*
++ * TOPSEE TS38F2 board support
++ *
++ * Note: this board based on TI's DM368 IPNC,
++ * and also known as SMTSec SIP-1080P.
++ * But i think it incompatible with origianl TI's board.
++ *
++ * Copyright (C) 2014 Vladimir Ermakov
++ * based on board-dm365-evm.c by TI.
++ *
++ * This program is free software; you can redistribute it and/or
++ * modify it under the terms of the GNU General Public License as
++ * published by the Free Software Foundation version 2.
++ *
++ * This program is distributed "as is" WITHOUT ANY WARRANTY of any
++ * kind, whether express or implied; without even the implied warranty
++ * of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++ * GNU General Public License for more details.
++ */
++#include <linux/kernel.h>
++#include <linux/init.h>
++#include <linux/err.h>
++#include <linux/i2c.h>
++#include <linux/io.h>
++#include <linux/clk.h>
++#include <linux/platform_data/at24.h>
++#include <linux/leds.h>
++#include <linux/mtd/mtd.h>
++#include <linux/mtd/partitions.h>
++#include <linux/slab.h>
++#include <linux/mtd/nand.h>
++#include <linux/input.h>
++#include <linux/spi/spi.h>
++#include <linux/spi/eeprom.h>
++#include <linux/v4l2-dv-timings.h>
++#include <linux/gpio.h>
++#include <linux/delay.h>
++
++#include <asm/mach-types.h>
++#include <asm/mach/arch.h>
++
++#include <mach/mux.h>
++#include <mach/common.h>
++#include <linux/platform_data/i2c-davinci.h>
++#include <mach/serial.h>
++#include <linux/platform_data/mtd-davinci.h>
++
++#include "davinci.h"
++
++
++/* TODO:
++ * - parse cmdargs eth=mac value
++ * - Composite video out
++ * - Aptina MT9P031 sensor description
++ * - IR CUT driver (separate file)
++ * - IR LED control on GPIO28.
++ *   Also original dmesg reports that they use ADC CH0 for light sensor (IR LED connector).
++ */
++
++#define TS38_IPNC_PHY_ID	"davinci_mdio-0:01"
++#define NAND_BLOCK_SIZE		SZ_128K
++
++
++/* My SIP-1080P has Macronix MX30LF1G08AA.
++ * NAND SLC, 128 MiB, 2048+64 page, 128 KiB erase block.
++ */
++static struct mtd_partition davinci_nand_partitions[] = {
++	{
++		/* UBL (a few copies) plus U-Boot
++		 * plus U-Boot environment.
++		 *
++		 * Original kernel uses 3 MiB + 2 MiB for bootloader and params.
++		 * But params partition not used, and alld bootloader data palced in
++		 * first 24 NAND blocks.
++		 */
++		.name		= "bootloader",
++		.offset		= 0,
++		.size		= 32 * NAND_BLOCK_SIZE,
++		.mask_flags	= MTD_WRITEABLE, /* force read-only */
++	}, {
++		.name		= "kernel",
++		.offset		= MTDPART_OFS_APPEND,
++		.size		= SZ_8M,
++		.mask_flags	= 0,
++	}, {
++		/* MTD partition for UBI volumes.
++		 */
++		.name		= "ubi",
++		.offset		= MTDPART_OFS_APPEND,
++		.size		= MTDPART_SIZ_FULL,
++		.mask_flags	= 0,
++	}, {
++		/* overlay partition */
++		.name		= "firmware",
++		.offset		= 32 * NAND_BLOCK_SIZE,
++		.size		= MTDPART_SIZ_FULL,
++		.mask_flags	= 0,
++	}
++	/* two blocks with bad block table (and mirror) at the end */
++};
++
++/* See http://processors.wiki.ti.com/index.php/DM365_Nand_ECC_layout
++ */
++static struct nand_ecclayout dm36x_nand_ecclayout = {
++	.eccbytes = 40,
++	.eccpos  = {6, 7, 8, 9, 10, 11, 12, 13, 14, 15,
++		22, 23, 24, 25, 26, 27, 28, 29, 30, 31,
++		38, 39, 40, 41, 42, 43, 44, 45, 46, 47,
++		54, 55, 56, 57, 58, 59, 60, 61, 62, 63,
++	},
++	.oobfree = {{2, 4}, {16, 6}, {32, 6}, {48, 6} },
++};
++
++/* flash bbt decriptors. Copy from sigticam sdk (dm368ipnc).
++ * Also see: http://davinci-ipnc.blogspot.ru/2012/02/ipncdm368-bbt-problem-after-patch-to.html
++ */
++static uint8_t nand_davinci_bbt_pattern[] = { 'B', 'b', 't', '0' };
++static uint8_t nand_davinci_mirror_pattern[] = { '1', 't', 'b', 'B' };
++
++static struct nand_bbt_descr nand_davinci_bbt_main_descr = {
++	.options = NAND_BBT_LASTBLOCK | NAND_BBT_CREATE | NAND_BBT_WRITE |
++		   NAND_BBT_2BIT | NAND_BBT_VERSION | NAND_BBT_PERCHIP,
++	.offs = 2,      // offset of the pattern in the oob area of the page
++	.len = 4,       // length of the pattern, if 0 no pattern check is performed
++	.veroffs = 16,  // offset of the bbt version counter in the oob are of the page
++	.maxblocks = 4, // maximum number of blocks to search for a bbt.
++			// This number of blocks is reserved at the end of the device
++			// where the tables are written.
++	.pattern = nand_davinci_bbt_pattern
++};
++
++static struct nand_bbt_descr nand_davinci_bbt_mirror_descr = {
++	.options = NAND_BBT_LASTBLOCK | NAND_BBT_CREATE | NAND_BBT_WRITE |
++		   NAND_BBT_2BIT | NAND_BBT_VERSION | NAND_BBT_PERCHIP,
++	.offs = 2,
++	.len = 4,
++	.veroffs = 16,
++	.maxblocks = 4,
++	.pattern = nand_davinci_mirror_pattern
++};
++
++static struct davinci_nand_pdata davinci_nand_data = {
++	.mask_chipsel		= 0,
++	.parts			= davinci_nand_partitions,
++	.nr_parts		= ARRAY_SIZE(davinci_nand_partitions),
++	.ecc_mode		= NAND_ECC_HW,
++	.options		= NAND_NO_SUBPAGE_WRITE,
++	.bbt_options		= NAND_BBT_USE_FLASH,
++	.bbt_td			= &nand_davinci_bbt_main_descr,
++	.bbt_md			= &nand_davinci_bbt_mirror_descr,
++	.ecc_bits		= 4,
++	.ecclayout		= &dm36x_nand_ecclayout,
++};
++
++static struct resource davinci_nand_resources[] = {
++	{
++		.start		= DM365_ASYNC_EMIF_DATA_CE0_BASE,
++		.end		= DM365_ASYNC_EMIF_DATA_CE0_BASE + SZ_32M - 1,
++		.flags		= IORESOURCE_MEM,
++	}, {
++		.start		= DM365_ASYNC_EMIF_CONTROL_BASE,
++		.end		= DM365_ASYNC_EMIF_CONTROL_BASE + SZ_4K - 1,
++		.flags		= IORESOURCE_MEM,
++	},
++};
++
++static struct platform_device davinci_nand_device = {
++	.name			= "davinci_nand",
++	.id			= 0,
++	.num_resources		= ARRAY_SIZE(davinci_nand_resources),
++	.resource		= davinci_nand_resources,
++	.dev			= {
++		.platform_data	= &davinci_nand_data,
++	},
++};
++
++static struct i2c_board_info i2c_info[] = {
++	{
++		I2C_BOARD_INFO("ds1337", 0x68),
++	}, {
++		I2C_BOARD_INFO("mt9p031", 0x46),
++	},
++};
++
++static struct davinci_i2c_platform_data i2c_pdata = {
++	.bus_freq	= 400	/* kHz */,
++	.bus_delay	= 0	/* usec */,
++	.sda_pin	= 21,
++	.scl_pin	= 20,
++};
++
++static struct gpio_led gpio_leds[] = {
++	{
++		.name = "system:red",
++		.gpio = 33,
++		.active_low = true,
++		.default_trigger = "heartbeat",
++	}
++};
++
++static struct gpio_led_platform_data gpio_led_data = {
++	.leds		= gpio_leds,
++	.num_leds	= ARRAY_SIZE(gpio_leds),
++};
++
++static struct platform_device leds_gpio = {
++	.name	= "leds-gpio",
++	.id	= -1,
++	.dev	= {
++		.platform_data	= &gpio_led_data,
++	},
++};
++
++static struct platform_device *ipnc_platform_devices[] __initdata = {
++	&davinci_nand_device,
++	&leds_gpio,
++};
++
++/*
++ * Device init's
++ */
++
++static void ipnc_emac_configure(void)
++{
++	/* hack from DM365 EVM board: setup phy_id.
++	 * virt2real do this before cfg_reg configure
++	 */
++	{
++		struct davinci_soc_info *soc_info = &davinci_soc_info;
++		soc_info->emac_pdata->phy_id = TS38_IPNC_PHY_ID;
++	}
++
++	/*
++	 * EMAC pins are multiplexed with GPIO and UART
++	 * Further details are available at the DM365 ARM
++	 * Subsystem Users Guide(sprufg5.pdf) pages 125 - 127
++	 */
++	davinci_cfg_reg(DM365_EMAC_TX_EN);
++	davinci_cfg_reg(DM365_EMAC_TX_CLK);
++	davinci_cfg_reg(DM365_EMAC_COL);
++	davinci_cfg_reg(DM365_EMAC_TXD3);
++	davinci_cfg_reg(DM365_EMAC_TXD2);
++	davinci_cfg_reg(DM365_EMAC_TXD1);
++	davinci_cfg_reg(DM365_EMAC_TXD0);
++	davinci_cfg_reg(DM365_EMAC_RXD3);
++	davinci_cfg_reg(DM365_EMAC_RXD2);
++	davinci_cfg_reg(DM365_EMAC_RXD1);
++	davinci_cfg_reg(DM365_EMAC_RXD0);
++	davinci_cfg_reg(DM365_EMAC_RX_CLK);
++	davinci_cfg_reg(DM365_EMAC_RX_DV);
++	davinci_cfg_reg(DM365_EMAC_RX_ER);
++	davinci_cfg_reg(DM365_EMAC_CRS);
++	davinci_cfg_reg(DM365_EMAC_MDIO);
++	davinci_cfg_reg(DM365_EMAC_MDCLK);
++
++	/*
++	 * EMAC interrupts are multiplexed with GPIO interrupts
++	 * Details are available at the DM365 ARM
++	 * Subsystem Users Guide(sprufg5.pdf) pages 133 - 134
++	 */
++	davinci_cfg_reg(DM365_INT_EMAC_RXTHRESH);
++	davinci_cfg_reg(DM365_INT_EMAC_RXPULSE);
++	davinci_cfg_reg(DM365_INT_EMAC_TXPULSE);
++	davinci_cfg_reg(DM365_INT_EMAC_MISCPULSE);
++
++	/* PHY reset */
++	{
++		pr_debug("EMAC: PHY reset.");
++		/* davinci_cfg_reg(DM365_GPIO50);
++		 * configured by uboot, not defined in dm365.c */
++		gpio_request(50, "emac-phy-reset");
++		gpio_direction_output(50, 1);
++		mdelay(10);
++		gpio_direction_output(50, 0);
++		mdelay(10);
++		gpio_direction_output(50, 1);
++	}
++}
++
++static void __init ipnc_init_i2c(void)
++{
++	/* hack from dm368-leopard */
++	{
++		davinci_cfg_reg(DM365_GPIO20);
++		gpio_request(20, "i2c-scl");
++		gpio_direction_output(20, 0);
++		davinci_cfg_reg(DM365_I2C_SCL);
++	}
++
++	davinci_init_i2c(&i2c_pdata);
++	i2c_register_board_info(1, i2c_info, ARRAY_SIZE(i2c_info));
++}
++
++static void __init ipnc_init_status_led(void)
++{
++	// setup led gpio mux.
++	davinci_cfg_reg(DM365_GPIO33);
++}
++
++/*
++ * Board init
++ */
++
++static void __init ipnc_map_io(void)
++{
++	dm365_init();
++}
++
++static __init void ipnc_init(void)
++{
++	int ret;
++
++	ret = dm365_gpio_register();
++	if (ret)
++		pr_warn("%s: GPIO init failed: %d\n", __func__, ret);
++
++	ipnc_init_i2c();
++	davinci_serial_init(dm365_serial_device);
++	ipnc_init_status_led();
++	ipnc_emac_configure();
++
++	platform_add_devices(ipnc_platform_devices,
++			ARRAY_SIZE(ipnc_platform_devices));
++}
++
++/* NOTE: preinstalled U-Boot says that it is EVM board (mach number). */
++MACHINE_START(DAVINCI_DM365_EVM, "DaVinci DM368 IPNC TS38F2")
++	.atag_offset	= 0x100,
++	.map_io		= ipnc_map_io,
++	.init_irq	= davinci_irq_init,
++	.init_time	= davinci_timer_init,
++	.init_machine	= ipnc_init,
++	.init_late	= davinci_init_late,
++	.dma_zone_size	= SZ_128M,
++	.restart	= davinci_restart,
++MACHINE_END
++
+-- 
+2.1.0
+

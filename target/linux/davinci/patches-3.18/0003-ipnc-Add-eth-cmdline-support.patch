@@ -1,0 +1,36 @@
+From fef27a092ff418bf738e42545395dc3b0c64d6ba Mon Sep 17 00:00:00 2001
+From: Vladimir Ermakov <vooon341@gmail.com>
+Date: Sat, 20 Dec 2014 08:05:13 +0300
+Subject: [PATCH 3/3] ipnc: Add eth= cmdline support
+
+---
+ arch/arm/mach-davinci/board-ts38f2-ipnc.c | 13 +++++++++++++
+ 1 file changed, 13 insertions(+)
+
+diff --git a/arch/arm/mach-davinci/board-ts38f2-ipnc.c b/arch/arm/mach-davinci/board-ts38f2-ipnc.c
+index b5b4a82..ef527bd 100644
+--- a/arch/arm/mach-davinci/board-ts38f2-ipnc.c
++++ b/arch/arm/mach-davinci/board-ts38f2-ipnc.c
+@@ -297,6 +297,19 @@ static void __init ipnc_init_status_led(void)
+ 	davinci_cfg_reg(DM365_GPIO33);
+ }
+ 
++/* EMAC MAC adress passed via `mac=` cmdline argument */
++
++static int __init ipnc_eth_mac_setup(char *str)
++{
++	struct davinci_soc_info *soc_info = &davinci_soc_info;
++
++	if (mac_pton(str, soc_info->emac_pdata->mac_addr))
++		pr_info("EMAC: Use MAC from eth=%pM", soc_info->emac_pdata->mac_addr);
++
++	return 1;
++}
++__setup("eth=", ipnc_eth_mac_setup);
++
+ /*
+  * Board init
+  */
+-- 
+2.1.0
+
