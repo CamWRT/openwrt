@@ -28,7 +28,7 @@ echo
 echo *** Modifying U-Boot environment.
 
 setenv bootcmd  nboot 0x80700000 0 \$(kernelnaddr)\; bootm 0x80700000
-setenv bootargs 55M console=ttyS0,115200n8 eth=\$(ethaddr)
+setenv bootargs mem=55M console=ttyS0,115200n8 eth=$(ethaddr) ro rootfstype=squashfs
 saveenv
 echo *** New environment:
 printenv
