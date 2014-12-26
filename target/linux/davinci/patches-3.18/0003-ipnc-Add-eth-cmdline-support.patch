@@ -1,7 +1,7 @@
 From 032f0a503c5b6858e894defd0f8239ebecd9d26f Mon Sep 17 00:00:00 2001
 From: Vladimir Ermakov <vooon341@gmail.com>
 Date: Sat, 20 Dec 2014 08:05:13 +0300
-Subject: [PATCH 3/4] ipnc: Add eth= cmdline support
+Subject: [PATCH 3/5] ipnc: Add eth= cmdline support
 
 Original camera U-boot pass MAC address in cmdline option.
 I decided to keep that option.

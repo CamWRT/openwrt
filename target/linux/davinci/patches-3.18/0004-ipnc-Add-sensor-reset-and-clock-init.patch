@@ -1,7 +1,7 @@
 From c171e251e5c29411a02041e49d881fc8397cfd26 Mon Sep 17 00:00:00 2001
 From: Vladimir Ermakov <vooon341@gmail.com>
 Date: Fri, 26 Dec 2014 07:31:26 +0300
-Subject: [PATCH 4/4] ipnc: Add sensor reset and clock init.
+Subject: [PATCH 4/5] ipnc: Add sensor reset and clock init.
 
 Signed-off-by: Vladimir Ermakov <vooon341@gmail.com>
 ---

@@ -1,0 +1,103 @@
+From e09089656581b776e7741c70121d7f510968d101 Mon Sep 17 00:00:00 2001
+From: Vladimir Ermakov <vooon341@gmail.com>
+Date: Fri, 26 Dec 2014 10:37:28 +0300
+Subject: [PATCH 5/5] ipnc: add VPBE config for composite output
+
+Based on DM365 and DM355 EVM boards.
+---
+ arch/arm/mach-davinci/board-ts38f2-ipnc.c | 65 ++++++++++++++++++++++++++++++-
+ 1 file changed, 64 insertions(+), 1 deletion(-)
+
+diff --git a/arch/arm/mach-davinci/board-ts38f2-ipnc.c b/arch/arm/mach-davinci/board-ts38f2-ipnc.c
+index 0fc4258..9c24773 100644
+--- a/arch/arm/mach-davinci/board-ts38f2-ipnc.c
++++ b/arch/arm/mach-davinci/board-ts38f2-ipnc.c
+@@ -49,7 +49,6 @@
+ 
+ 
+ /* TODO:
+- * - Composite video out
+  * - Aptina MT9P031 sensor description
+  * - IR CUT driver (separate file)
+  * - IR LED control on GPIO28.
+@@ -216,6 +215,68 @@ static struct platform_device *ipnc_platform_devices[] __initdata = {
+ };
+ 
+ /*
++ * VPBE settings
++ */
++
++/* venc standards timings */
++static struct vpbe_enc_mode_info vpbe_enc_std_timing[] = {
++	{
++		.name		= "ntsc",
++		.timings_type	= VPBE_ENC_STD,
++		.std_id		= V4L2_STD_NTSC,
++		.interlaced	= 1,
++		.xres		= 720,
++		.yres		= 480,
++		.aspect		= {11, 10},
++		.fps		= {30000, 1001},
++		.left_margin	= 0x79,
++		.upper_margin	= 0x10,
++	},
++	{
++		.name		= "pal",
++		.timings_type	= VPBE_ENC_STD,
++		.std_id		= V4L2_STD_PAL,
++		.interlaced	= 1,
++		.xres		= 720,
++		.yres		= 576,
++		.aspect		= {54, 59},
++		.fps		= {25, 1},
++		.left_margin	= 0x7E,
++		.upper_margin	= 0x16,
++	},
++};
++
++static struct vpbe_output vpbe_outputs[] = {
++	{
++		.output		= {
++			.index		= 0,
++			.name		= "Composite",
++			.type		= V4L2_OUTPUT_TYPE_ANALOG,
++			.std		= V4L2_STD_NTSC | V4L2_STD_PAL,
++			.capabilities	= V4L2_OUT_CAP_STD,
++		},
++		.subdev_name	= DM365_VPBE_VENC_SUBDEV_NAME,
++		.default_mode	= "ntsc",
++		.num_modes	= ARRAY_SIZE(vpbe_enc_std_timing),
++		.modes		= vpbe_enc_std_timing,
++		.if_params	= V4L2_MBUS_FMT_FIXED,
++	}
++};
++
++static struct vpbe_config vpbe_display_cfg = {
++	.module_name	= "dm365-vpbe-display",
++	.i2c_adapter_id	= 1,
++	.osd		= {
++		.module_name	= DM365_VPBE_OSD_SUBDEV_NAME,
++	},
++	.venc		= {
++		.module_name	= DM365_VPBE_VENC_SUBDEV_NAME,
++	},
++	.num_outputs	= ARRAY_SIZE(vpbe_outputs),
++	.outputs	= vpbe_outputs,
++};
++
++/*
+  * Device init's
+  */
+ 
+@@ -353,6 +414,8 @@ static __init void ipnc_init(void)
+ 	ipnc_emac_configure();
+ 	ipnc_init_sensor();
+ 
++	dm365_init_video(NULL, &vpbe_display_cfg);
++
+ 	platform_add_devices(ipnc_platform_devices,
+ 			ARRAY_SIZE(ipnc_platform_devices));
+ }
+-- 
+2.1.0
+
