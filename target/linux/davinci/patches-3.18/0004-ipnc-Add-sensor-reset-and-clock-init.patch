@@ -1,0 +1,65 @@
+From c171e251e5c29411a02041e49d881fc8397cfd26 Mon Sep 17 00:00:00 2001
+From: Vladimir Ermakov <vooon341@gmail.com>
+Date: Fri, 26 Dec 2014 07:31:26 +0300
+Subject: [PATCH 4/4] ipnc: Add sensor reset and clock init.
+
+Signed-off-by: Vladimir Ermakov <vooon341@gmail.com>
+---
+ arch/arm/mach-davinci/board-ts38f2-ipnc.c | 27 +++++++++++++++++++++++++--
+ 1 file changed, 25 insertions(+), 2 deletions(-)
+
+diff --git a/arch/arm/mach-davinci/board-ts38f2-ipnc.c b/arch/arm/mach-davinci/board-ts38f2-ipnc.c
+index 80a0dda..0fc4258 100644
+--- a/arch/arm/mach-davinci/board-ts38f2-ipnc.c
++++ b/arch/arm/mach-davinci/board-ts38f2-ipnc.c
+@@ -268,8 +268,6 @@ static void ipnc_emac_configure(void)
+ 		/* davinci_cfg_reg(DM365_GPIO50);
+ 		 * configured by uboot, not defined in dm365.c */
+ 		gpio_request(50, "emac-phy-reset");
+-		gpio_direction_output(50, 1);
+-		mdelay(10);
+ 		gpio_direction_output(50, 0);
+ 		mdelay(10);
+ 		gpio_direction_output(50, 1);
+@@ -296,6 +294,30 @@ static void __init ipnc_init_status_led(void)
+ 	davinci_cfg_reg(DM365_GPIO33);
+ }
+ 
++static void __init ipnc_init_sensor(void)
++{
++	struct clk *clkout0_clk;
++
++	/* reset pin GIO91 */
++
++	/* davinci_cfg_reg(DM365_GPIO91);
++	 * configured by uboot, not defined in dm365.c */
++	gpio_request(91, "imager-reset");
++	gpio_direction_output(91, 0);
++	mdelay(1);
++	gpio_direction_output(91, 1);
++
++	/* sensor clock */
++
++	davinci_cfg_reg(DM365_CLKOUT0);
++
++	clkout0_clk = clk_get(NULL, "clkout0");
++	if (IS_ERR(clkout0_clk))
++		return;
++
++	clk_enable(clkout0_clk);
++}
++
+ /* EMAC MAC adress passed via `mac=` cmdline argument */
+ static int __init ipnc_eth_mac_setup(char *str)
+ {
+@@ -329,6 +351,7 @@ static __init void ipnc_init(void)
+ 	davinci_serial_init(dm365_serial_device);
+ 	ipnc_init_status_led();
+ 	ipnc_emac_configure();
++	ipnc_init_sensor();
+ 
+ 	platform_add_devices(ipnc_platform_devices,
+ 			ARRAY_SIZE(ipnc_platform_devices));
+-- 
+2.1.0
+
