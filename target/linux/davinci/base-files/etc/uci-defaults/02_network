@@ -7,8 +7,20 @@ touch /etc/config/network
 
 . /lib/functions/uci-defaults.sh
 
+ucidef_set_interface_lan_dhcp() {
+	local ifname=$1
+
+	uci batch <<EOF
+set network.lan='interface'
+set network.lan.ifname='$ifname'
+set network.lan.proto='dhcp'
+set network.lan.ipaddr='192.168.1.100'
+set network.lan.netmask='255.255.255.0'
+EOF
+}
+
 ucidef_set_interface_loopback
-ucidef_set_interface_lan "eth0"
+ucidef_set_interface_lan_dhcp "eth0"
 
 uci commit network
 
